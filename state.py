@@ -277,6 +277,9 @@ class File(object):
                 self.exitcode = int(lines.pop(-1))
                 self.is_generated = True
                 self.stamp = Stamp(lines.pop(-1))
+                if not self.exists() and not self.stamp.is_missing():
+                    unlink(self.tmpfilename('deps'))
+                    return self.refresh()
                 self.runid = self.stamp.runid()
                 self.deps = [line.split(' ', 1) for line in lines]
                 # if the next line fails, it means that the .dep file is not
@@ -307,9 +310,9 @@ class File(object):
         with open(depsname, 'a') as f:
             f.write(line + '\n')
 
-    def build_starting(self):
+    def build_starting(self, write_parent=True):
         """Call this when you're about to start building this target."""
-        if vars.TARGET:
+        if vars.TARGET and write_parent:
             with open(self.tmpfilename('parent'), "w") as f:
                 f.write(os.path.relpath(vars.TARGET, self.dir))
         depsname = self.tmpfilename('deps2')
@@ -320,13 +323,13 @@ class File(object):
             st = os.fstat(f.fileno())
             f.write('%d %d\n' % (st.st_dev, st.st_ino))
 
-    def build_done(self, exitcode):
+    def build_done(self, exitcode, runid=vars.RUNID):
         """Call this when you're done building this target."""
         depsname = self.tmpfilename('deps2')
         debug3('build ending: %r\n', depsname)
-        self._add(self.read_stamp(runid=vars.RUNID).stamp)
+        self._add(self.read_stamp(runid=runid).stamp)
         self._add(exitcode)
-        os.utime(depsname, (vars.RUNID, vars.RUNID))
+        os.utime(depsname, (runid, runid))
         os.rename(depsname, self.tmpfilename('deps'))
         unlink(self.tmpfilename('parent'))
 
